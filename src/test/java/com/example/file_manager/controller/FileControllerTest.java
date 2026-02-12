@@ -2,56 +2,80 @@ package com.example.file_manager.controller;
 
 import com.example.file_manager.dto.FileInfo;
 import com.example.file_manager.service.api.FileManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.web.servlet.MockMvc;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.ResponseEntity;
 
 import java.io.ByteArrayInputStream;
+import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-@WebMvcTest(FileController.class)
+@ExtendWith(MockitoExtension.class)
 class FileControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Mock
+    private FileManager fileManager;
 
-    @MockBean
-    private FileManager FileManager;
+    @InjectMocks
+    private FileController controller;
+
+    private FileInfo fileInfo;
+
+    @BeforeEach
+    void setup() {
+        fileInfo = new FileInfo("test.txt", 5);
+    }
 
     @Test
-    void shouldUploadFile() throws Exception {
+    void shouldListFiles() throws Exception {
+        when(fileManager.list()).thenReturn(List.of(fileInfo));
 
-        // Fake fichier envoyé
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "test.txt",
-                "text/plain",
-                "hello".getBytes()
-        );
+        ResponseEntity<List<FileInfo>> response = controller.listFiles();
 
-        // Fake réponse du service
-        FileInfo fileInfo = new FileInfo("test.txt", null, 5);
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(1, response.getBody().size());
+    }
 
-        Mockito.when(FileManager.save(eq("test.txt"), any(ByteArrayInputStream.class)))
-                .thenReturn(fileInfo);
+    @Test
+    void shouldGetFile() throws Exception {
+        when(fileManager.get("test.txt")).thenReturn(fileInfo);
 
-        mockMvc.perform(multipart("/files/upload")
-                        .file(file)
-                        .with(request -> {
-                            request.setMethod("PUT");
-                            return request;
-                        }))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType("application/json"))
-                .andExpect(jsonPath("$.filename").value("test.txt"))
-                .andExpect(jsonPath("$.size").value(5));
+        ResponseEntity<FileInfo> response = controller.getFile("test.txt");
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("test.txt", response.getBody().getFilename());
+    }
+
+    @Test
+    void shouldReturn404WhenFileNotFound() throws Exception {
+        when(fileManager.get("missing.txt")).thenReturn(null);
+
+        ResponseEntity<FileInfo> response = controller.getFile("missing.txt");
+
+        assertEquals(404, response.getStatusCodeValue());
+    }
+
+    @Test
+    void shouldDeleteFile() throws Exception {
+        when(fileManager.delete("test.txt")).thenReturn(true);
+
+        ResponseEntity<Void> response = controller.deleteFile("test.txt");
+
+        assertEquals(200, response.getStatusCodeValue());
+    }
+
+    @Test
+    void shouldReturn404WhenDeleteFails() throws Exception {
+        when(fileManager.delete("missing.txt")).thenReturn(false);
+
+        ResponseEntity<Void> response = controller.deleteFile("missing.txt");
+
+        assertEquals(404, response.getStatusCodeValue());
     }
 }
