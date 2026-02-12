@@ -1,15 +1,17 @@
 package com.example.file_manager.service.impl;
 
 import com.example.file_manager.dto.FileInfo;
+import com.example.file_manager.exception.FileStorageException;
 import com.example.file_manager.service.api.fileManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.util.ArrayList;
+import java.io.IOException;
+import java.nio.file.*;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class LocalFileManager implements fileManager {
@@ -17,53 +19,111 @@ public class LocalFileManager implements fileManager {
     @Value("${storage.folder:files}")
     String storageFolder;
 
-    @Override
-    public FileInfo save(String filename, InputStream content) throws Exception {
-        File folder = new File(storageFolder);
-        if (!folder.exists()) folder.mkdirs();
+    private Path getStoragePath() {
+        return Paths.get(storageFolder).toAbsolutePath().normalize();
+    }
 
-        File target = new File(folder, filename);
-        try (FileOutputStream out = new FileOutputStream(target)) {
-            out.write(content.readAllBytes());
+    private Path resolveSecurePath(String filename) {
+
+        Path storagePath = getStoragePath();
+
+        Path targetPath = storagePath.resolve(filename).normalize();
+
+        if (!targetPath.startsWith(storagePath)) {
+            throw new FileStorageException("Invalid file path detected.");
         }
 
-        return new FileInfo(filename, target.getAbsolutePath(), target.length());
+        return targetPath;
     }
 
     @Override
-    public FileInfo get(String filename) throws Exception {
-        File file = new File(storageFolder, filename);
-        if (!file.exists()) return null;
-        return new FileInfo(filename, file.getAbsolutePath(), file.length());
-    }
+    public FileInfo save(String filename, InputStream content) {
 
-    @Override
-    public List<FileInfo> list() throws Exception {
-        List<FileInfo> files = new ArrayList<>();
-        File folder = new File(storageFolder);
+        try {
+            Path storagePath = getStoragePath();
+            Files.createDirectories(storagePath);
 
-        if (!folder.exists()) return files;
+            Path targetPath = resolveSecurePath(filename);
 
-        for (File f : folder.listFiles()) {
-            files.add(new FileInfo(
-                    f.getName(),
-                    f.getAbsolutePath(),
-                    f.length()
-            ));
+            Files.copy(content, targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+            return new FileInfo(
+                    targetPath.getFileName().toString(),
+                    targetPath.toString(),
+                    Files.size(targetPath)
+            );
+
+        } catch (IOException e) {
+            throw new FileStorageException("Failed to store file", e);
         }
-        return files;
     }
 
     @Override
-    public boolean delete(String filename) throws Exception {
-        File file = new File(storageFolder, filename);
-        return file.exists() && file.delete();
+    public FileInfo get(String filename) {
+        try {
+            Path path = resolveSecurePath(filename);
+
+            if (!Files.exists(path)) {
+                return null;
+            }
+
+            return new FileInfo(
+                    path.getFileName().toString(),
+                    path.toString(),
+                    Files.size(path)
+            );
+
+        } catch (IOException e) {
+            throw new FileStorageException("Failed to read file info", e);
+        }
     }
 
     @Override
-    public InputStream download(String filename) throws Exception {
-        File file = new File(storageFolder, filename);
-        return file.exists() ? new java.io.FileInputStream(file) : null;
+    public List<FileInfo> list() {
+        try (Stream<Path> paths = Files.list(getStoragePath())) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .map(path -> {
+                        try {
+                            return new FileInfo(
+                                    path.getFileName().toString(),
+                                    path.toString(),
+                                    Files.size(path)
+                            );
+                        } catch (IOException e) {
+                            throw new FileStorageException("Failed to list files", e);
+                        }
+                    })
+                    .collect(Collectors.toList());
+
+        } catch (IOException e) {
+            throw new FileStorageException("Failed to list directory", e);
+        }
+    }
+
+    @Override
+    public boolean delete(String filename) {
+        try {
+            Path path = resolveSecurePath(filename);
+            return Files.deleteIfExists(path);
+        } catch (IOException e) {
+            throw new FileStorageException("Failed to delete file", e);
+        }
+    }
+
+    @Override
+    public InputStream download(String filename) {
+        try {
+            Path path = resolveSecurePath(filename);
+
+            if (!Files.exists(path)) {
+                return null;
+            }
+
+            return Files.newInputStream(path);
+
+        } catch (IOException e) {
+            throw new FileStorageException("Failed to download file", e);
+        }
     }
 }
-// hello word 2

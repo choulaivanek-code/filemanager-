@@ -1,64 +1,90 @@
 package com.example.file_manager.service.impl;
 
 import com.example.file_manager.dto.FileInfo;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.springframework.test.util.ReflectionTestUtils;
-
+import com.example.file_manager.exception.FileStorageException;
+import org.junit.jupiter.api.*;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class LocalFileManagerTest {
 
     private LocalFileManager fileManager;
-
-    @TempDir
-    Path tempDir;
+    private static final String TEST_FOLDER = "test-files";
 
     @BeforeEach
-    void setUp() {
+    void setup() {
         fileManager = new LocalFileManager();
-        ReflectionTestUtils.setField(fileManager, "storageFolder", tempDir.toString());
+        fileManager.storageFolder = TEST_FOLDER;
+    }
+
+    @AfterEach
+    void cleanup() throws Exception {
+        Path path = Paths.get(TEST_FOLDER);
+        if (Files.exists(path)) {
+            Files.walk(path)
+                    .sorted((a, b) -> b.compareTo(a))
+                    .forEach(p -> p.toFile().delete());
+        }
     }
 
     @Test
-    void shouldSaveFile() throws Exception {
-        FileInfo info = fileManager.save(
-                "test.txt",
-                new ByteArrayInputStream("hello".getBytes())
-        );
+    void shouldSaveFile() {
+        ByteArrayInputStream content =
+                new ByteArrayInputStream("hello".getBytes());
+
+        FileInfo info = fileManager.save("test.txt", content);
 
         assertNotNull(info);
         assertEquals("test.txt", info.getFilename());
+        assertEquals(5, info.getSize());
     }
 
     @Test
-    void shouldGetExistingFile() throws Exception {
-        fileManager.save(
-                "file.txt",
-                new ByteArrayInputStream("content".getBytes())
-        );
+    void shouldGetExistingFile() {
+        fileManager.save("file.txt",
+                new ByteArrayInputStream("data".getBytes()));
 
-        FileInfo file = fileManager.get("file.txt");
+        FileInfo info = fileManager.get("file.txt");
 
-        assertNotNull(file);
-        assertEquals("file.txt", file.getFilename());
+        assertNotNull(info);
+        assertEquals("file.txt", info.getFilename());
     }
 
     @Test
-    void shouldDownloadFile() throws Exception {
-        fileManager.save(
-                "download.txt",
-                new ByteArrayInputStream("data".getBytes())
+    void shouldReturnNullWhenFileNotFound() {
+        assertNull(fileManager.get("unknown.txt"));
+    }
+
+    @Test
+    void shouldListFiles() {
+        fileManager.save("a.txt",
+                new ByteArrayInputStream("a".getBytes()));
+        fileManager.save("b.txt",
+                new ByteArrayInputStream("b".getBytes()));
+
+        List<FileInfo> files = fileManager.list();
+
+        assertEquals(2, files.size());
+    }
+
+    @Test
+    void shouldDeleteFile() {
+        fileManager.save("delete.txt",
+                new ByteArrayInputStream("data".getBytes()));
+
+        boolean deleted = fileManager.delete("delete.txt");
+
+        assertTrue(deleted);
+    }
+
+    @Test
+    void shouldPreventPathTraversal() {
+        assertThrows(FileStorageException.class, () ->
+                fileManager.save("../hack.txt",
+                        new ByteArrayInputStream("bad".getBytes()))
         );
-
-        InputStream inputStream = fileManager.download("download.txt");
-
-        assertNotNull(inputStream);
-        inputStream.close(); // 🔥 IMPORTANT
     }
 }
