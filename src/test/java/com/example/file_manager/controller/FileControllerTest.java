@@ -78,4 +78,24 @@ class FileControllerTest {
 
         assertEquals(404, response.getStatusCodeValue());
     }
+    @Test
+    void shouldReturn404WhenFileMissing() throws Exception {
+        when(fileManager.get("missing.txt")).thenReturn(null);
+
+        ResponseEntity<FileInfo> response =
+                controller.getFile("missing.txt");
+
+        assertEquals(404, response.getStatusCodeValue());
+    }
+
+    @Test
+    void shouldReturnList() throws Exception {
+        when(fileManager.list()).thenReturn(List.of());
+
+        ResponseEntity<List<FileInfo>> response =
+                controller.listFiles();
+
+        assertEquals(200, response.getStatusCodeValue());
+    }
+
 }

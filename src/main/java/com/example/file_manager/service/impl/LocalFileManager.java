@@ -11,7 +11,6 @@ import java.io.InputStream;
 import java.nio.file.*;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 public class LocalFileManager implements FileManager {
@@ -20,24 +19,22 @@ public class LocalFileManager implements FileManager {
     public String storageFolder;
 
     private Path getStoragePath() {
-        return Paths.get(storageFolder)
-                .toAbsolutePath()
-                .normalize();
+        return Paths.get(storageFolder).toAbsolutePath().normalize();
     }
 
     private Path resolveSecurePath(String filename) {
-        try {
-            Path storagePath = getStoragePath();
-            Path target = storagePath.resolve(filename).normalize();
-
-            if (!target.startsWith(storagePath)) {
-                throw new FileStorageException("Invalid file path");
-            }
-
-            return target;
-        } catch (Exception e) {
-            throw new FileStorageException("Invalid file path", e);
+        if (filename == null || filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            throw new FileStorageException("Invalid filename");
         }
+
+        Path storagePath = getStoragePath();
+        Path target = storagePath.resolve(filename).normalize();
+
+        if (!target.startsWith(storagePath)) {
+            throw new FileStorageException("Path traversal attempt detected");
+        }
+
+        return target;
     }
 
     @Override
@@ -47,12 +44,12 @@ public class LocalFileManager implements FileManager {
             Files.createDirectories(storagePath);
 
             Path target = resolveSecurePath(filename);
-
             Files.copy(content, target, StandardCopyOption.REPLACE_EXISTING);
 
             return new FileInfo(
-                    filename,
-                    Files.size(target)
+                    target.getFileName().toString(),
+                    Files.size(target),
+                    Files.getLastModifiedTime(target).toMillis()
             );
 
         } catch (IOException e) {
@@ -66,12 +63,13 @@ public class LocalFileManager implements FileManager {
             Path target = resolveSecurePath(filename);
 
             if (!Files.exists(target)) {
-                throw new FileStorageException("File not found");
+                return null;
             }
 
             return new FileInfo(
-                    filename,
-                    Files.size(target)
+                    target.getFileName().toString(),
+                    Files.size(target),
+                    Files.getLastModifiedTime(target).toMillis()
             );
 
         } catch (IOException e) {
@@ -88,21 +86,20 @@ public class LocalFileManager implements FileManager {
                 return List.of();
             }
 
-            try (Stream<Path> stream = Files.list(storagePath)) {
-                return stream
-                        .filter(Files::isRegularFile)
-                        .map(path -> {
-                            try {
-                                return new FileInfo(
-                                        path.getFileName().toString(),
-                                        Files.size(path)
-                                );
-                            } catch (IOException e) {
-                                throw new FileStorageException("Failed to read file size", e);
-                            }
-                        })
-                        .collect(Collectors.toList());
-            }
+            return Files.list(storagePath)
+                    .filter(Files::isRegularFile)
+                    .map(path -> {
+                        try {
+                            return new FileInfo(
+                                    path.getFileName().toString(),
+                                    Files.size(path),
+                                    Files.getLastModifiedTime(path).toMillis()
+                            );
+                        } catch (IOException e) {
+                            throw new FileStorageException("Failed to read file info", e);
+                        }
+                    })
+                    .collect(Collectors.toList());
 
         } catch (IOException e) {
             throw new FileStorageException("Failed to list directory", e);
@@ -127,7 +124,7 @@ public class LocalFileManager implements FileManager {
     }
 
     @Override
-    public byte[] read(String filename) {
+    public InputStream download(String filename) {
         try {
             Path target = resolveSecurePath(filename);
 
@@ -135,15 +132,11 @@ public class LocalFileManager implements FileManager {
                 throw new FileStorageException("File not found");
             }
 
-            return Files.readAllBytes(target);
+            return Files.newInputStream(target);
 
         } catch (IOException e) {
-            throw new FileStorageException("Failed to read file", e);
+            throw new FileStorageException("Failed to download file", e);
         }
     }
-
-    @Override
-    public InputStream download(String name) {
-        return null;
-    }
 }
+

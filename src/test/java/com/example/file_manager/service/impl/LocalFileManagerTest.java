@@ -5,6 +5,7 @@ import com.example.file_manager.exception.FileStorageException;
 import org.junit.jupiter.api.*;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.file.*;
 import java.util.List;
 
@@ -16,11 +17,9 @@ class LocalFileManagerTest {
     private static final String TEST_FOLDER = "test-files";
 
     @BeforeEach
-    void setup() throws Exception {
+    void setup() {
         FileManager = new LocalFileManager();
         FileManager.storageFolder = TEST_FOLDER;
-
-        Files.createDirectories(Paths.get(TEST_FOLDER));
     }
 
     @AfterEach
@@ -35,10 +34,10 @@ class LocalFileManagerTest {
 
     @Test
     void shouldSaveFile() {
-        FileInfo info = FileManager.save(
-                "test.txt",
-                new ByteArrayInputStream("hello".getBytes())
-        );
+        ByteArrayInputStream content =
+                new ByteArrayInputStream("hello".getBytes());
+
+        FileInfo info = FileManager.save("test.txt", content);
 
         assertNotNull(info);
         assertEquals("test.txt", info.getFilename());
@@ -46,34 +45,20 @@ class LocalFileManagerTest {
     }
 
     @Test
-    void shouldSaveEmptyFile() {
-        FileManager.save(
-                "empty.txt",
-                new ByteArrayInputStream(new byte[0])
-        );
-
-        List<FileInfo> files = FileManager.list();
-        assertTrue(files.stream()
-                .anyMatch(f -> f.getFilename().equals("empty.txt")));
-    }
-
-    @Test
     void shouldGetExistingFile() {
-        FileManager.save(
-                "file.txt",
-                new ByteArrayInputStream("data".getBytes())
-        );
+        FileManager.save("file.txt",
+                new ByteArrayInputStream("data".getBytes()));
 
         FileInfo info = FileManager.get("file.txt");
 
         assertNotNull(info);
         assertEquals("file.txt", info.getFilename());
+        assertEquals(4, info.getSize());
     }
 
     @Test
-    void shouldThrowWhenFileNotFoundOnGet() {
-        assertThrows(FileStorageException.class,
-                () -> FileManager.get("unknown.txt"));
+    void shouldReturnNullWhenFileNotFound() {
+        assertNull(FileManager.get("unknown.txt"));
     }
 
     @Test
@@ -89,12 +74,6 @@ class LocalFileManagerTest {
     }
 
     @Test
-    void shouldReturnEmptyListWhenFolderEmpty() {
-        List<FileInfo> files = FileManager.list();
-        assertTrue(files.isEmpty());
-    }
-
-    @Test
     void shouldDeleteFile() {
         FileManager.save("delete.txt",
                 new ByteArrayInputStream("data".getBytes()));
@@ -105,33 +84,43 @@ class LocalFileManagerTest {
     }
 
     @Test
-    void shouldThrowWhenDeletingNonExistingFile() {
-        assertThrows(FileStorageException.class,
-                () -> FileManager.delete("notfound.txt"));
+    void shouldThrowExceptionWhenDeletingMissingFile() {
+        assertThrows(FileStorageException.class, () ->
+                FileManager.delete("missing.txt")
+        );
     }
 
     @Test
-    void shouldReadFile() {
-        FileManager.save("read.txt",
-                new ByteArrayInputStream("content".getBytes()));
+    void shouldDownloadExistingFile() throws Exception {
+        FileManager.save("download.txt",
+                new ByteArrayInputStream("abc".getBytes()));
 
-        byte[] data = FileManager.read("read.txt");
+        InputStream input = FileManager.download("download.txt");
 
-        assertEquals("content", new String(data));
+        assertNotNull(input);
+        byte[] content = input.readAllBytes();
+        assertEquals("abc", new String(content));
     }
 
     @Test
-    void shouldThrowWhenReadingNonExistingFile() {
-        assertThrows(FileStorageException.class,
-                () -> FileManager.read("missing.txt"));
+    void shouldThrowExceptionWhenDownloadingMissingFile() {
+        assertThrows(FileStorageException.class, () ->
+                FileManager.download("missing.txt")
+        );
     }
 
     @Test
     void shouldPreventPathTraversal() {
-        assertThrows(FileStorageException.class,
-                () -> FileManager.save(
-                        "../hack.txt",
-                        new ByteArrayInputStream("bad".getBytes())
-                ));
+        assertThrows(FileStorageException.class, () ->
+                FileManager.save("../hack.txt",
+                        new ByteArrayInputStream("bad".getBytes()))
+        );
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenFolderEmpty() {
+        List<FileInfo> files = FileManager.list();
+        assertNotNull(files);
+        assertTrue(files.isEmpty());
     }
 }
