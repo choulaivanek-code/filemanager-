@@ -3,6 +3,7 @@ package com.example.file_manager.service.impl;
 import com.example.file_manager.dto.FileInfo;
 import com.example.file_manager.exception.FileStorageException;
 import org.junit.jupiter.api.*;
+
 import java.io.ByteArrayInputStream;
 import java.nio.file.*;
 import java.util.List;
@@ -30,6 +31,10 @@ class LocalFileManagerTest {
         }
     }
 
+    // ===============================
+    // SAVE
+    // ===============================
+
     @Test
     void shouldSaveFile() {
         ByteArrayInputStream content =
@@ -41,6 +46,26 @@ class LocalFileManagerTest {
         assertEquals("test.txt", info.getFilename());
         assertEquals(5, info.getSize());
     }
+
+    @Test
+    void shouldSaveEmptyFile() {
+        FileInfo info = fileManager.save("empty.txt",
+                new ByteArrayInputStream(new byte[0]));
+
+        assertEquals(0, info.getSize());
+    }
+
+    @Test
+    void shouldPreventPathTraversalOnSave() {
+        assertThrows(FileStorageException.class, () ->
+                fileManager.save("../hack.txt",
+                        new ByteArrayInputStream("bad".getBytes()))
+        );
+    }
+
+    // ===============================
+    // GET
+    // ===============================
 
     @Test
     void shouldGetExistingFile() {
@@ -59,6 +84,17 @@ class LocalFileManagerTest {
     }
 
     @Test
+    void shouldPreventPathTraversalOnGet() {
+        assertThrows(FileStorageException.class, () ->
+                fileManager.get("../hack.txt")
+        );
+    }
+
+    // ===============================
+    // LIST
+    // ===============================
+
+    @Test
     void shouldListFiles() {
         fileManager.save("a.txt",
                 new ByteArrayInputStream("a".getBytes()));
@@ -71,6 +107,16 @@ class LocalFileManagerTest {
     }
 
     @Test
+    void shouldReturnEmptyListWhenFolderEmpty() {
+        List<FileInfo> files = fileManager.list();
+        assertTrue(files.isEmpty());
+    }
+
+    // ===============================
+    // DELETE
+    // ===============================
+
+    @Test
     void shouldDeleteFile() {
         fileManager.save("delete.txt",
                 new ByteArrayInputStream("data".getBytes()));
@@ -81,10 +127,25 @@ class LocalFileManagerTest {
     }
 
     @Test
-    void shouldPreventPathTraversal() {
+    void shouldReturnFalseWhenDeletingNonExistingFile() {
+        boolean deleted = fileManager.delete("unknown.txt");
+        assertFalse(deleted);
+    }
+
+    @Test
+    void shouldPreventPathTraversalOnDelete() {
         assertThrows(FileStorageException.class, () ->
-                fileManager.save("../hack.txt",
-                        new ByteArrayInputStream("bad".getBytes()))
+                fileManager.delete("../hack.txt")
         );
+    }
+
+    @Test
+    void shouldReturnNullAfterDelete() {
+        fileManager.save("temp.txt",
+                new ByteArrayInputStream("data".getBytes()));
+
+        fileManager.delete("temp.txt");
+
+        assertNull(fileManager.get("temp.txt"));
     }
 }

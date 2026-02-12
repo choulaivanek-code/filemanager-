@@ -80,26 +80,34 @@ public class LocalFileManager implements fileManager {
 
     @Override
     public List<FileInfo> list() {
-        try (Stream<Path> paths = Files.list(getStoragePath())) {
-            return paths
-                    .filter(Files::isRegularFile)
-                    .map(path -> {
-                        try {
-                            return new FileInfo(
-                                    path.getFileName().toString(),
-                                    path.toString(),
-                                    Files.size(path)
-                            );
-                        } catch (IOException e) {
-                            throw new FileStorageException("Failed to list files", e);
-                        }
-                    })
-                    .collect(Collectors.toList());
+        Path storagePath = getStoragePath();
+
+        try {
+            if (!Files.exists(storagePath)) {
+                return List.of(); // dossier inexistant = liste vide
+            }
+
+            try (Stream<Path> stream = Files.list(storagePath)) {
+                return stream
+                        .filter(Files::isRegularFile)
+                        .map(path -> {
+                            try {
+                                return new FileInfo(
+                                        path.getFileName().toString(),
+                                        Files.size(path)
+                                );
+                            } catch (IOException e) {
+                                throw new FileStorageException("Error reading file info", e);
+                            }
+                        })
+                        .collect(Collectors.toList());
+            }
 
         } catch (IOException e) {
             throw new FileStorageException("Failed to list directory", e);
         }
     }
+
 
     @Override
     public boolean delete(String filename) {
