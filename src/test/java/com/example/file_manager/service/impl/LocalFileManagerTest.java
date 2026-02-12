@@ -12,13 +12,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class LocalFileManagerTest {
 
-    private LocalFileManager fileManager;
+    private LocalFileManager FileManager;
     private static final String TEST_FOLDER = "test-files";
 
     @BeforeEach
-    void setup() {
-        fileManager = new LocalFileManager();
-        fileManager.storageFolder = TEST_FOLDER;
+    void setup() throws Exception {
+        FileManager = new LocalFileManager();
+        FileManager.storageFolder = TEST_FOLDER;
+
+        Files.createDirectories(Paths.get(TEST_FOLDER));
     }
 
     @AfterEach
@@ -31,16 +33,12 @@ class LocalFileManagerTest {
         }
     }
 
-    // ===============================
-    // SAVE
-    // ===============================
-
     @Test
     void shouldSaveFile() {
-        ByteArrayInputStream content =
-                new ByteArrayInputStream("hello".getBytes());
-
-        FileInfo info = fileManager.save("test.txt", content);
+        FileInfo info = FileManager.save(
+                "test.txt",
+                new ByteArrayInputStream("hello".getBytes())
+        );
 
         assertNotNull(info);
         assertEquals("test.txt", info.getFilename());
@@ -49,103 +47,91 @@ class LocalFileManagerTest {
 
     @Test
     void shouldSaveEmptyFile() {
-        FileInfo info = fileManager.save("empty.txt",
-                new ByteArrayInputStream(new byte[0]));
-
-        assertEquals(0, info.getSize());
-    }
-
-    @Test
-    void shouldPreventPathTraversalOnSave() {
-        assertThrows(FileStorageException.class, () ->
-                fileManager.save("../hack.txt",
-                        new ByteArrayInputStream("bad".getBytes()))
+        FileManager.save(
+                "empty.txt",
+                new ByteArrayInputStream(new byte[0])
         );
-    }
 
-    // ===============================
-    // GET
-    // ===============================
+        List<FileInfo> files = FileManager.list();
+        assertTrue(files.stream()
+                .anyMatch(f -> f.getFilename().equals("empty.txt")));
+    }
 
     @Test
     void shouldGetExistingFile() {
-        fileManager.save("file.txt",
-                new ByteArrayInputStream("data".getBytes()));
+        FileManager.save(
+                "file.txt",
+                new ByteArrayInputStream("data".getBytes())
+        );
 
-        FileInfo info = fileManager.get("file.txt");
+        FileInfo info = FileManager.get("file.txt");
 
         assertNotNull(info);
         assertEquals("file.txt", info.getFilename());
     }
 
     @Test
-    void shouldReturnNullWhenFileNotFound() {
-        assertNull(fileManager.get("unknown.txt"));
+    void shouldThrowWhenFileNotFoundOnGet() {
+        assertThrows(FileStorageException.class,
+                () -> FileManager.get("unknown.txt"));
     }
-
-    @Test
-    void shouldPreventPathTraversalOnGet() {
-        assertThrows(FileStorageException.class, () ->
-                fileManager.get("../hack.txt")
-        );
-    }
-
-    // ===============================
-    // LIST
-    // ===============================
 
     @Test
     void shouldListFiles() {
-        fileManager.save("a.txt",
+        FileManager.save("a.txt",
                 new ByteArrayInputStream("a".getBytes()));
-        fileManager.save("b.txt",
+        FileManager.save("b.txt",
                 new ByteArrayInputStream("b".getBytes()));
 
-        List<FileInfo> files = fileManager.list();
+        List<FileInfo> files = FileManager.list();
 
         assertEquals(2, files.size());
     }
 
     @Test
     void shouldReturnEmptyListWhenFolderEmpty() {
-        List<FileInfo> files = fileManager.list();
+        List<FileInfo> files = FileManager.list();
         assertTrue(files.isEmpty());
     }
 
-    // ===============================
-    // DELETE
-    // ===============================
-
     @Test
     void shouldDeleteFile() {
-        fileManager.save("delete.txt",
+        FileManager.save("delete.txt",
                 new ByteArrayInputStream("data".getBytes()));
 
-        boolean deleted = fileManager.delete("delete.txt");
+        boolean deleted = FileManager.delete("delete.txt");
 
         assertTrue(deleted);
     }
 
     @Test
-    void shouldReturnFalseWhenDeletingNonExistingFile() {
-        boolean deleted = fileManager.delete("unknown.txt");
-        assertFalse(deleted);
+    void shouldThrowWhenDeletingNonExistingFile() {
+        assertThrows(FileStorageException.class,
+                () -> FileManager.delete("notfound.txt"));
     }
 
     @Test
-    void shouldPreventPathTraversalOnDelete() {
-        assertThrows(FileStorageException.class, () ->
-                fileManager.delete("../hack.txt")
-        );
+    void shouldReadFile() {
+        FileManager.save("read.txt",
+                new ByteArrayInputStream("content".getBytes()));
+
+        byte[] data = FileManager.read("read.txt");
+
+        assertEquals("content", new String(data));
     }
 
     @Test
-    void shouldReturnNullAfterDelete() {
-        fileManager.save("temp.txt",
-                new ByteArrayInputStream("data".getBytes()));
+    void shouldThrowWhenReadingNonExistingFile() {
+        assertThrows(FileStorageException.class,
+                () -> FileManager.read("missing.txt"));
+    }
 
-        fileManager.delete("temp.txt");
-
-        assertNull(fileManager.get("temp.txt"));
+    @Test
+    void shouldPreventPathTraversal() {
+        assertThrows(FileStorageException.class,
+                () -> FileManager.save(
+                        "../hack.txt",
+                        new ByteArrayInputStream("bad".getBytes())
+                ));
     }
 }

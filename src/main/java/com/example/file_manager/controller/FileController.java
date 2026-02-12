@@ -1,7 +1,7 @@
 package com.example.file_manager.controller;
 
 import com.example.file_manager.dto.FileInfo;
-import com.example.file_manager.service.api.fileManager;
+import com.example.file_manager.service.api.FileManager;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.MediaType;
@@ -16,9 +16,9 @@ import java.util.List;
 @Tag(name = "File Manager API", description = "Opérations sur les fichiers")
 public class FileController {
 
-    private final fileManager fileManager;
+    private final FileManager fileManager;
 
-    public FileController(fileManager fileManager) {
+    public FileController(FileManager fileManager) {
         this.fileManager = fileManager;
     }
 

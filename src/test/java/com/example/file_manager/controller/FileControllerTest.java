@@ -1,7 +1,7 @@
 package com.example.file_manager.controller;
 
 import com.example.file_manager.dto.FileInfo;
-import com.example.file_manager.service.api.fileManager;
+import com.example.file_manager.service.api.FileManager;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +24,7 @@ class FileControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
-    private fileManager fileManager;
+    private FileManager FileManager;
 
     @Test
     void shouldUploadFile() throws Exception {
@@ -40,7 +40,7 @@ class FileControllerTest {
         // Fake réponse du service
         FileInfo fileInfo = new FileInfo("test.txt", null, 5);
 
-        Mockito.when(fileManager.save(eq("test.txt"), any(ByteArrayInputStream.class)))
+        Mockito.when(FileManager.save(eq("test.txt"), any(ByteArrayInputStream.class)))
                 .thenReturn(fileInfo);
 
         mockMvc.perform(multipart("/files/upload")
